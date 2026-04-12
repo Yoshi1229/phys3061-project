@@ -52,3 +52,38 @@ def init_asteroids(N=2000, a_min=2.0, a_max=4.0, phase='aligned'):
     v0 = np.stack([-v_circ*np.sin(theta0), v_circ*np.cos(theta0)], axis=1)
     return r0, v0, a0
 
+def integrate_restricted(r0, v0, t_end=200*np.pi, dt=0.002, sample_every=200):
+    """
+    t_end default ~ 200*pi yrs (~100 Jupiter orbits since TJ=2*pi)
+    """
+    r = r0.copy()
+    v = v0.copy()
+    t = 0.0
+    a = accel_restricted(r, t)
+    snapshots = []   # store (t, r, v) sparsely
+    keep_mask = np.ones(len(r), dtype=bool)
+
+    # Ejection criteria parameters
+    r_max = 50.0  # AU; beyond this treat as ejected
+    r_min = 0.2   # AU; collisions with Sun
+
+    steps = int(np.ceil(t_end/dt))
+    for n in range(steps):
+        # r_{n+1}
+        r += v*dt + 0.5*a*(dt**2)
+        t += dt
+        # a_{n+1}
+        a_new = accel_restricted(r, t)
+        # v_{n+1}
+        v += 0.5*(a + a_new)*dt
+        a = a_new
+
+        # Ejection/collision masking (optional)
+        rn = np.linalg.norm(r, axis=1)
+        keep_mask &= (rn < r_max) & (rn > r_min)
+
+        if (n % sample_every) == 0 or n == steps-1:
+            snapshots.append((t, r.copy(), v.copy(), keep_mask.copy()))
+
+    return snapshots
+
