@@ -5,8 +5,8 @@ import matplotlib.pyplot as plt
 GMsun = 4 * np.pi**2       # AU^3 / yr^2
 muJ   = 0.001 * GMsun      # GM of Jupiter (mass ratio ~1e-3)
 rJ    = 5.2                # AU
-TJ    = 2*np.pi            # yrs
-nJ    = 2*np.pi / TJ       # = 1 rad/yr
+nJ    = np.sqrt(GMsun / rJ**3) 
+TJ    = 2 * np.pi / nJ     # ~11.86 years
 
 def jupiter_state(t):
     # Prescribed circular orbit in the restricted model
@@ -87,3 +87,51 @@ def integrate_restricted(r0, v0, t_end=200*np.pi, dt=0.002, sample_every=200):
 
     return snapshots
 
+# init
+r0, v0, a0_init = init_asteroids(N=1800, a_min=2.0, a_max=4.0, phase='aligned')
+
+# integrate (~100 Jupiter orbits)
+snaps = integrate_restricted(r0, v0, t_end=200*np.pi, dt=0.002, sample_every=500)
+
+# collect a(t) for each asteroid over late times to avoid initial transients
+a_time_series = []
+mask_series = []
+for (t, r, v, keep) in snaps[int(0.5*len(snaps)) : ]:  # second half only
+    a_ts = semi_major_axis(r, v)
+    a_time_series.append(a_ts)
+    mask_series.append(keep)
+
+A = np.stack(a_time_series, axis=0)            # shape: (T_samples, N)
+M = np.stack(mask_series, axis=0)              # bool mask
+valid = np.isfinite(A) & M
+
+# median a over time for each asteroid, requiring it was valid >50% of samples
+frac_valid = np.mean(valid, axis=0)
+a_median = np.full(A.shape[1], np.nan)
+for j in range(A.shape[1]):
+    good = valid[:, j]
+    if np.mean(good) > 0.5:
+        a_median[j] = np.nanmedian(A[good, j])
+
+# keep only well-behaved survivors
+survivors = np.isfinite(a_median)
+a_final = a_median[survivors]
+
+def resonance_a(p, q, aJ=rJ):  # asteroid:Jupiter = p:q
+    return aJ * (q/p)**(2/3)
+
+res_list = [(3,1), (5,2), (7,3), (2,1)]  # classic gaps
+
+plt.figure(figsize=(8,4.5))
+bins = np.linspace(2.0, 4.0, 81)
+plt.hist(a_final, bins=bins, color='steelblue', alpha=0.85)
+for (p,q) in res_list:
+    ax = resonance_a(p,q)
+    if 2.0 <= ax <= 4.0:
+        plt.axvline(ax, color='k', ls='--', lw=1)
+        plt.text(ax+0.01, plt.ylim()[1]*0.9, f'{p}:{q}', rotation=90, va='top', ha='left', fontsize=9)
+plt.xlabel('Semi-major axis a (AU)')
+plt.ylabel('Number of asteroids')
+plt.title('Asteroid distribution and Kirkwood gaps (restricted 3-body)')
+plt.tight_layout()
+plt.show()
