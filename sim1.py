@@ -237,7 +237,7 @@ axs[2].legend(loc='upper right')
 axs[2].grid(True, alpha=0.3)
 
 plt.tight_layout()
-plt.savefig('10M_Resonant_Asteroid.png', bbox_inches='tight')
+plt.savefig('Resonant_Asteroid.png', bbox_inches='tight')
 plt.show()
 
 # histogram
